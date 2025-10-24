@@ -1,7 +1,5 @@
-// bot.js
 import { io } from "socket.io-client";
 
-// ⭐️ IMPORT MAPS & STRATEGIES
 import { 
     FINGERPRINT_1, 
     FINGERPRINT_2, 
@@ -13,17 +11,18 @@ import {
     STRATEGY_MAP_3 
 } from './strategies.js';
 
-// --- CẤU HÌNH ---
-const SOCKET_SERVER_ADDR = "https://zarena-dev2.zinza.com.vn"; // Sửa khi BTC cung cấp
-const YOUR_TOKEN = "W3vn7UkP"; // Sửa khi BTC cung cấp
+import dotenv from 'dotenv';
+dotenv.config();
 
-// ⭐️ FLAG MÔI TRƯỜNG: Đặt là 'true' khi thi đấu, 'false' khi luyện tập
-const IS_COMPETITION_MODE = false; 
+// --- CẤU HÌNH KẾT NỐI & CHẾ ĐỘ ---
+const SOCKET_SERVER = process.env.SOCKET_SERVER;
+const TOKEN = process.env.TOKEN ;
+const IS_COMPETITION_MODE = process.env.IS_COMPETITION_MODE === 'true';
 
 // --- HẰNG SỐ GAME ---
-const TILE_SIZE = 40; // Giả định kích thước 1 ô là 40px
-const ITEM_TYPES = ['S', 'B', 'R']; // Các loại vật phẩm
-const WALL_TYPES = ['W', 'C']; // Các loại tường (Hòm 'C' cũng là tường)
+const TILE_SIZE = 40;
+const ITEM_TYPES = ['S', 'B', 'R'];
+const WALL_TYPES = ['W', 'C'];
 
 // --- BIẾN TRẠNG THÁI GAME (BỘ NÃO) ---
 let gameState = {
@@ -39,9 +38,9 @@ let currentTarget = null; // Trí nhớ: mục tiêu bot đang đi tới
 
 // --- KHỞI TẠO KẾT NỐI ---
 console.log("Đang kết nối tới server...");
-const socket = io(SOCKET_SERVER_ADDR, {
+const socket = io(SOCKET_SERVER, {
     auth: {
-        token: YOUR_TOKEN
+        token: TOKEN
     }
 });
 
@@ -443,7 +442,6 @@ function runGameLogic() {
             currentTarget = newTarget;
             return;
         }
-        
         // console.log("Không có mục tiêu. Đứng im.");
     }
 }
@@ -452,8 +450,6 @@ function runGameLogic() {
 // --- LẮNG NGHE SỰ KIỆN TỪ SERVER ---
 
 socket.on("connect", () => {
-    console.log(`Kết nối thành công! Socket ID: ${socket.id}`);
-    console.log("Đang tham gia phòng chơi...");
     socket.emit("join", {}); 
 });
 
@@ -470,12 +466,9 @@ socket.on("connect_error", (err) => {
 
 // 2. Nhận thông tin phòng (sau khi join)
 socket.on("user", (data) => {
-    console.log("Đã tham gia phòng! Nhận dữ liệu game ban đầu.");
-    
     // 1. Lưu map "thật" của server
     gameState.map = data.map;
     
-    // 2. Lưu thông tin khác
     gameState.bombers = data.bombers;
     gameState.bombs = data.bombs;
     gameState.myUid = socket.id;
@@ -513,7 +506,6 @@ socket.on("user", (data) => {
     }
 });
 
-// 3. Game bắt đầu (Môi trường thi đấu)
 socket.on("start", (data) => {
     console.log(`--- TRẬN ĐẤU BẮT ĐẦU (lúc ${data.start_at}) ---`); 
     gameState.gameHasStarted = true;
@@ -522,17 +514,32 @@ socket.on("start", (data) => {
     }
 });
 
-// 4. Game kết thúc (Môi trường thi đấu)
 socket.on("finish", (data) => {
-    console.log("--- TRẬN ĐẤU KẾT THÚC ---");
-    gameState.gameHasStarted = false;
-    if (gameLogicInterval) clearInterval(gameLogicInterval);
-    gameLogicInterval = null;
-    currentTarget = null;
+    
+    if (IS_COMPETITION_MODE) {
+        console.log("--- TRẬN ĐẤU THI ĐẤU KẾT THÚC ---");
+        gameState.gameHasStarted = false;
+        if (gameLogicInterval) clearInterval(gameLogicInterval);
+        gameLogicInterval = null;
+        currentTarget = null;
+    } else {
+        // 1. Tắt bot
+        gameState.gameHasStarted = false; 
+        if (gameLogicInterval) clearInterval(gameLogicInterval);
+        gameLogicInterval = null;
+        currentTarget = null;
+        
+        console.log("Đang đóng kết nối (close)...");
+        socket.close();
+
+        setTimeout(() => {
+            console.log("Đang mở kết nối lại (open)...");
+            socket.open();
+        }, 1000);
+    }
 });
 
 // --- CÁC SỰ KIỆN CẬP NHẬT TRẠNG THÁI GAME ---
-
 /**
  * Lắng nghe sự kiện hòm bị phá
  * Cập nhật 'gameState.map' của chúng ta
@@ -564,7 +571,6 @@ socket.on("item_collected", (data) => {
 });
 
 // --- CÁC SỰ KIỆN KHÁC (Cập nhật trạng thái) ---
-
 socket.on("player_move", (data) => {
     const index = gameState.bombers.findIndex(b => b.uid === data.uid);
     if (index !== -1) {
