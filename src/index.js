@@ -595,11 +595,28 @@ socket.on("user_die_update", (data) => {
 });
 
 socket.on("new_life", (data) => {
-    console.log(`Bot ${data.name} đã hồi sinh.`);
-    const index = gameState.bombers.findIndex(b => b.uid === data.uid);
+    
+    const respawnedBotInfo = data.killed; 
+    
+    if (!respawnedBotInfo) {
+        return;
+    }
+
+    const uid = respawnedBotInfo.uid;
+    const name = respawnedBotInfo.name;
+
+    console.log(`Bot ${name} (uid: ${uid}) đã hồi sinh.`);
+
+    const index = gameState.bombers.findIndex(b => b.uid === uid);
+    
     if (index !== -1) {
-        gameState.bombers[index] = data;
+        gameState.bombers[index] = { 
+            ...gameState.bombers[index],
+            ...respawnedBotInfo, 
+            isAlive: true
+        };
     } else {
-        gameState.bombers.push(data);
+        console.log(`Bot LẠ (uid: ${uid}) được thêm vào game sau khi hồi sinh.`);
+        gameState.bombers.push(respawnedBotInfo);
     }
 });
